@@ -769,11 +769,32 @@ namespace Keyi_AILens {
         }
         return 0
     }
-    let asrEventId = 3500
-    let lastvoc = 0
-    let vocInitFlag = 0
+    const asrEventId = 8901;
+    let vocInitFlag = 0;
+    let lastvoc = 0;
+    let serial: Serial | null = null;
+    
+    enum vocabularyList {
+        cmd1 = 1,
+        cmd2 = 2,
+        cmd3 = 3,
+    }
+    function strToVoc(cmdStr: string): number {
+        if (cmdStr.includes("CMD1")) return vocabularyList.cmd1;
+        if (cmdStr.includes("CMD2")) return vocabularyList.cmd2;
+        if (cmdStr.includes("CMD3")) return vocabularyList.cmd3;
+        return 0;
+    }
+    
+    //% block="init ASR UART RX %rx TX %tx"
+    //% subcategory=ASR group="UART Port"
+    //% color=#00B1ED
+    export function initASRUart(rx: DigitalPin, tx: DigitalPin) {
+        serial = serial.createSerial(rx, tx, BaudRate.BaudRate9600);
+    }
+    
     //% block="ASR sensor hear %vocabulary"
-    //% subcategory=ASR group="IIC Port"
+    //% subcategory=ASR group="UART Port"
     //% vocabulary.fieldEditor="gridpicker" vocabulary.fieldOptions.columns=3
     //% color=#00B1ED
     export function onASR(vocabulary: vocabularyList, handler: () => void) {
@@ -782,27 +803,30 @@ namespace Keyi_AILens {
             vocInitFlag = 1;
             control.inBackground(() => {
                 while (true) {
-                    const voc = pins.i2cReadNumber(0x0B, 1)
-                    if (voc != lastvoc) {
-                        lastvoc = voc
-                        control.raiseEvent(asrEventId, lastvoc);
+                    if(serial && serial.canReadLine()){
+                        const str = serial.readLine().trim();
+                        const voc = strToVoc(str);
+                        if (voc != 0 && voc != lastvoc) {
+                            lastvoc = voc
+                            control.raiseEvent(asrEventId, lastvoc);
+                        }
                     }
                     basic.pause(50);
                 }
             })
         }
-
     }
+    
     //% block="ASR sensor enter learning-model"
-    //% subcategory=ASR group="IIC Port"
+    //% subcategory=ASR group="UART Port"
     //% color=#00B1ED
     export function setASRLearn(): void {
-        pins.i2cWriteNumber(0x0B, 0x50, NumberFormat.Int8LE)
+        if(serial) serial.writeLine("LEARN");
     }
+    
     //% block="ASR sensor clear learned entrys"
-    //% subcategory=ASR group="IIC Port"
+    //% subcategory=ASR group="UART Port"
     //% color=#00B1ED
     export function delASRLearn(): void {
-        pins.i2cWriteNumber(0x0B, 0x60, NumberFormat.Int8LE)
+        if(serial) serial.writeLine("CLEAR");
     }
-}
