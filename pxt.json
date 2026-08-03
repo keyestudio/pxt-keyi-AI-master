@@ -10,13 +10,7 @@
         "README.md",
         "main.ts",
         "_locales/zh-CN/pxt-Keyi-AI-strings.json",
-        "_locales/zh-CN/pxt-Keyi-AI-jsdoc-strings.json",
-        "_locales/ja/pxt-Keyi-AI-strings.json",
-        "_locales/nb/pxt-Keyi-AI-strings.json",
-        "_locales/de/pxt-Keyi-AI-strings.json",
-        "_locales/ko/pxt-Keyi-AI-strings.json",
-        "_locales/fr/pxt-Keyi-AI-strings.json",
-        "_locales/da/pxt-Keyi-AI-strings.json"
+        "_locales/zh-CN/pxt-Keyi-AI-jsdoc-strings.json"
     ],
     "testFiles": [
         "test.ts"
