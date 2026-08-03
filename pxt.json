@@ -1,0 +1,33 @@
+{
+    "name": "pxt-Keyi-AI",
+    "version": "1.0.10",
+    "description": "",
+    "dependencies": {
+        "core": "*",
+        "microphone": "*"
+    },
+    "files": [
+        "README.md",
+        "main.ts",
+        "_locales/zh-CN/pxt-Keyi-AI-strings.json",
+        "_locales/zh-CN/pxt-Keyi-AI-jsdoc-strings.json",
+        "_locales/ja/pxt-Keyi-AI-strings.json",
+        "_locales/nb/pxt-Keyi-AI-strings.json",
+        "_locales/de/pxt-Keyi-AI-strings.json",
+        "_locales/ko/pxt-Keyi-AI-strings.json",
+        "_locales/fr/pxt-Keyi-AI-strings.json",
+        "_locales/da/pxt-Keyi-AI-strings.json"
+    ],
+    "testFiles": [
+        "test.ts"
+    ],
+    "public": true,
+    "targetVersions": {
+        "target": "4.0.18",
+        "targetId": "microbit"
+    },
+    "supportedTargets": [
+        "microbit"
+    ],
+    "preferredEditor": "tsprj"
+}
