@@ -282,7 +282,7 @@ namespace Keyi_AILens {
         //% block="Move down to right"
         RD_Move = 74,
         //% block="Left drift"
-        drift_left = 75
+        drift_left = 75,
         //% block="Right drift"
         drift_right = 76
     }
