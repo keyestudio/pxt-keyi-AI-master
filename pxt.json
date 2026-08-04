@@ -1,27 +1,15 @@
 {
-    "name": "pxt-Keyi-AI",
-    "version": "1.0.10",
-    "description": "",
+    "name": "su03t",
+    "version": "0.0.1",
+    "description": "这是专为micro:bit提供的SU-03T语音识别积木",
+    "license": "MIT",
     "dependencies": {
-        "core": "*",
-        "microphone": "*"
+        "core": "*"
     },
     "files": [
         "README.md",
         "main.ts",
-        "_locales/zh-CN/pxt-Keyi-AI-strings.json",
-        "_locales/zh-CN/pxt-Keyi-AI-jsdoc-strings.json"
+        "_locales/zh/su03t-strings.json"
     ],
-    "testFiles": [
-        "test.ts"
-    ],
-    "public": true,
-    "targetVersions": {
-        "target": "4.0.18",
-        "targetId": "microbit"
-    },
-    "supportedTargets": [
-        "microbit"
-    ],
-    "preferredEditor": "tsprj"
+    "public": true
 }

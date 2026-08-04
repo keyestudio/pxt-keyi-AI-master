@@ -1,668 +1,266 @@
 /**
- * This extension is designed to programme and drive the Smart AI Lens(科易)
- */
-//% color=#0031AF icon="\uf06e" 
-//% groups='["Basic", "Ball", "Face", "Card", "Color", "Tracking", "Learn","ASR"]'
-//% block="Keyi_AI-Lens"
-namespace Keyi_AILens {
-    const CameraAdd = 0X14;
-    let DataBuff = pins.createBuffer(9);
-    const asrEventId = 8901;
-    let vocInitFlag = 0;
-    let lastvoc = 0;
-    let serial: Serial | null = null;
+* SU-03T语音识别晶片积木
+*/
 
-    /**
-    * Recognition Function List
-    */
-    export enum FuncList {
-        //% block="Card recognition"
-        Card = 2,
-        //% block="Face recognition" 
-        Face = 6,
-        //% block="Ball recognition"
-        Ball = 7,
-        //% block="Tracking recognition"
-        Tracking = 8,
-        //% block="Color recognition"
-        Color = 9,
-        //% block="Learn Object"
-        Things = 10
+//% weight=0 color=#439409 icon="\uf130" block="SU-03T ASR"
+namespace su03t {
+    let voice_tx = SerialPin.P1
+    let voice_rx = SerialPin.P2
+    let receivedBuff=pins.createBuffer(4)
+    let sendBuff=pins.createBuffer(7)
+    let mySU03Tevent: Action = null
+    let init=false
+    let firstCommandCode=0
+    let secondCommandCode=0
+ 
+    export enum voiceCommand {
+        //% block="请开灯"
+        command01 = 1,
+        //% block="请关灯"
+        command02 = 2,
+        //% block="打開繼電器"
+        command03 = 0x03,
+        //% block="關閉繼電器"
+        command04 = 0x04,
+        //% block="打開開關"
+        command05 = 0x05,
+        //% block="關閉開關"
+        command06 = 0x06,
+        //% block="亮一點"
+        command07 = 0x07,
+        //% block="暗一點"
+        command08 = 0x08,
+        //% block="啟動功能"
+        command2D = 0x2D,
+        //% block="關閉功能"
+        command2E = 0x2E,
+        //% block="打開"
+        command2F = 0x2F,
+        //% block="關閉"
+        command30 = 0x30,
+        //% block="前進"
+        command0B = 0x0B,
+        //% block="後退"
+        command0C = 0x0C,
+        //% block="左轉"
+        command0D = 0x0D,
+        //% block="右轉"
+        command0E = 0x0E,
+        //% block="停止"
+        command0F = 0x0F,
+        //% block="開啟鏡頭"
+        command10 = 0x10,
+        //% block="關閉鏡頭"
+        command11 = 0x11,
+        //% block="快一點"
+        command12 = 0x12,
+        //% block="慢一點"
+        command13 = 0x13,
+        //% block="播放音樂"
+        command15 = 0x15,
+        //% block="暫停播放"
+        command16 = 0x16,
+        //% block="停止播放"
+        command17 = 0x17,
+        //% block="上一首"
+        command18 = 0x18,
+        //% block="下一首"
+        command19 = 0x19,
+        //% block="第一首"
+        command1A = 0x1A,
+        //% block="最後一首"
+        command1B = 0x1B,
+        //% block="紅色"
+        command1F = 0x1F,
+        //% block="綠色"
+        command20 = 0x20,
+        //% block="藍色"
+        command21 = 0x21,
+        //% block="黃色"
+        command22 = 0x22,
+        //% block="青色"
+        command23 = 0x23,
+        //% block="洋紅色"
+        command24 = 0x24,
+        //% block="紫色"
+        command27 = 0x27,
+        //% block="白色"
+        command25 = 0x25,
+        //% block="黑色"
+        command26 = 0x26,
+        //% block="溫度"
+        command29 = 0x29,
+        //% block="濕度"
+        command2A = 0x2A,
+        //% block="亮度"
+        command2B = 0x2B,
+        //% block="距離"
+        command2C = 0x2C,
+        //% block="顯示圖片"
+        command33 = 0x33,
+        //% block="下一張圖"
+        command34 = 0x34,
+        //% block="上一張圖"
+        command35 = 0x35,
+        //% block="清除螢幕"
+        command36 = 0x36
     }
-    /**
-    * Ball data field
-    */
-    export enum Ballstatus {
-        //% block="X"
-        X = 2,
-        //% block="Y"
-        Y = 3,
-        //% block="Size"
-        Size = 4,
-        //% block="Confidence level "
-        Confidence = 6,
-        //% block="Ball ID"
-        ID = 8
+    export enum numberCommand {
+        //% block="溫度"
+        command02 = 0x02,
+        //% block="濕度"
+        command03 = 0x03,
+        //% block="亮度"
+        command04 = 0x04,
+        //% block="距離"
+        command05 = 0x05
     }
-    /**
-    * Face data field
-    */
-    export enum Facestatus {
-        //% block="X"
-        X = 2,
-        //% block="Y"
-        Y = 3,
-        //% block="W"
-        W = 4,
-        //% block="H"
-        H = 5,
-        //% block="Confidence level "
-        Confidence = 6,
-        //% block="Face ID"
-        ID = 8
+    export enum floatCommand {
+        //% block="integer"
+        command06 = 0x06,
+        //% block="decimal"
+        command07 = 0x07
     }
-    /**
-    * Card data field
-    */
-    export enum Cardstatus {
-        //% block="X"
-        X = 2,
-        //% block="Y"
-        Y = 3,
-        //% block="Size"
-        Size = 4,
-        //% block="Confidence level "
-        Confidence = 6,
-        //% block="Card ID"
-        ID = 8
+    export enum systemCommand {
+        //% block="喚醒"
+        command01 = 1,
+        //% block="進入睡眠"
+        command14 = 14,
+        //% block="靜音"
+        command08 = 8,
+        //% block="取消靜音"
+        command09 = 9,
+        //% block="最大音量"
+        command10 = 10,
+        //% block="最小音量"
+        command11 = 11,
+        //% block="大聲一點"
+        command12 = 12,
+        //% block="小聲一點"
+        command13 = 13
     }
-    /**
-    * Color target data field
-    */
-    export enum Colorstatus {
-        //% block="X"
-        X = 2,
-        //% block="Y"
-        Y = 3,
-        //% block="Size"
-        Size = 4,
-        //% block="Confidence level "
-        Confidence = 6,
-        //% block="Color ID"
-        ID = 8
+    export enum preCommand {
+        //% block="歡迎光臨"
+        command15 = 15,
+        //% block="有人入侵"
+        command16 = 16,
+        //% block="做得太好了，繼續加油"
+        command17 = 17,
+        //% block="時間到了，該起床了"
+        command18 = 18,
+        //% block="溫度太高了"
+        command19 = 19,
+        //% block="溫度太低了"
+        command20 = 20,
+        //% block="光線太亮了"
+        command21 = 21,
+        //% block="光線太暗了"
+        command22 = 22,
+        //% block="我愛你"
+        command23 = 23,
+        //% block="祝你生日快樂"
+        command24 = 24,
+        //% block="這個資料不太正常"
+        command25 = 25,
+        //% block="速度太慢了，請加速"
+        command26 = 26,
+        //% block="速度太快了，請注意安全"
+        command27 = 27,
+        //% block="前方有障礙物"
+        command28 = 28,
+        //% block="魔鏡魔鏡，誰是世界上最美的人"
+        command29 = 29,
+        //% block="煙霧超標"
+        command30 = 30,
+        //% block="瓦斯超標"
+        command31 = 31,
+        //% block="人體感應偵測觸發"
+        command32 = 32,
+        //% block="請注意安全，走廊上不要跑步"
+        command33 = 33
     }
-
-    export enum ColorLs {
-        //% block="Black"
-        black = 4,
-        //% block="Blue"
-        blue = 2,
-        //% block="Green"
-        green = 1,
-        //% block="Red"
-        red = 5,
-        //% block="White"
-        white = 6,
-        //% block="Yellow"
-        yellow = 3
+    //% blockId="su03t_setSerial" block="SU-03T initial|B6 connect to %pinTX|B7 connect to %pinRX"
+    //% weight=100 blockGap=20 pinTX.defl=SerialPin.P1 pinRX.defl=SerialPin.P2
+    export function su03tSetSerial(pinTX: SerialPin, pinRX: SerialPin): void {
+        serial.setRxBufferSize(4)
+        serial.setTxBufferSize(7)
+        voice_tx = pinTX;
+        voice_rx = pinRX;
+        serial.redirect(
+            voice_tx,
+            voice_rx,
+            BaudRate.BaudRate9600
+        )
+        basic.pause(100)
+        init=true
     }
-
-    export enum Linestatus {
-        //% block="Angle"
-        angle = 1,
-        //% block="Width"
-        width = 2,
-        //% block="Len"
-        len = 3
+    //% weight=90
+    //% blockId="su03t_recognize" block="when SU-03T recognizes voice command"
+    export function su03tEvent(tempAct: Action) {
+        mySU03Tevent=tempAct;
     }
-    export enum LineTrend {
-        //% block="Left"
-        left,
-        //% block="Right"
-        right,
-        //% block="Front"
-        front,
-        //% block="None"
-        none
-    }
-    /**
-    * Number Cards List
-    */
-    export enum numberCards {
-        //% block="0"
-        zero = 1,
-        //% block="1"
-        one = 2,
-        //% block="2"
-        two = 3,
-        //% block="3"
-        three = 4,
-        //% block="4"
-        four = 5,
-        //% block="5"
-        five = 6,
-        //% block="6"
-        six = 7,
-        //% block="7"
-        seven = 8,
-        //% block="8"
-        eight = 9,
-        //% block="9"
-        nine = 10
-    }
-    /*
-    * Letters Cards List
-    */
-    export enum letterCards {
-        //% block="A"
-        A = 1,
-        //% block="B"
-        B = 2,
-        //% block="C"
-        C = 3,
-        //% block="D"
-        D = 4,
-        //% block="E"
-        E = 5
-    }
-    /*
-    * Traffic Cards List
-    */
-    export enum trafficCards {
-        //% block="Forward"
-        forward = 18,
-        //% block="Back"
-        back = 20,
-        //% block="Stop"
-        stop = 19,
-        //% block="Turn left"
-        turnleft = 16,
-        //% block="Turn right"
-        turnright = 17
-    }
-    /*
-    * Other Cards List
-    */
-    export enum otherCards {
-        //% block="Mouse"
-        mouse = 1,
-        //% block="micro:bit"
-        microbit = 2,
-        //% block="Ruler"
-        ruler = 3,
-        //% block="Cat"
-        cat = 4,
-        //% block="Pear"
-        pear = 5,
-        //% block="Ship"
-        ship = 6,
-        //% block="Apple"
-        apple = 7,
-        //% block="Car"
-        car = 8,
-        //% block="Pen"
-        pen = 9,
-        //% block="Dog"
-        dog = 10,
-        //% block="Umbrella"
-        umbrella = 11,
-        //% block="Airplane"
-        airplane = 12,
-        //% block="Clock"
-        clock = 13,
-        //% block="Grape"
-        grape = 14,
-        //% block="Cup"
-        cup = 15
-    }
-    export enum learnID {
-        //% block="ID1"
-        ID1 = 1,
-        //% block="ID2"
-        ID2 = 2,
-        //% block="ID3"
-        ID3 = 3,
-        //% block="ID4"
-        ID4 = 4,
-        //% block="ID5"
-        ID5 = 5
-    }
-    export enum ballColorList {
-        //% block="Red"
-        Red = 2,
-        //% block="Blue"
-        Blue = 1
-    }
-    /////////ASR Voice Command
-    export enum vocabularyList {
-        //% block="Lights on"
-        TurnOn_Light = 1,
-        //% block="Lights off"
-        TurnOff_Light = 2,
-        //% block="Turn on red light"
-        TurnOn_RLight = 13,
-        //% block="Turn off red light"
-        TurnOff_RLight = 14,
-        //% block="Turn on green light"
-        TurnOn_GLight = 15,
-        //% block="Turn off green light"
-        TurnOff_GLight = 16,
-        //% block="Turn on blue light"
-        TurnOn_BLight = 17,
-        //% block="Turn off blue light"
-        TurnOff_BLight = 19,
-        //% block="Full speed ahead"
-        Advance = 25,
-        //% block="Reversing"
-        Back_off = 26,
-        //% block="Turn left"
-        Turn_left = 27,
-        //% block="Turn right"
-        Turn_right = 28,
-        //% block="Tracking mode"
-        Tracking = 29,
-        //% block="Following mode"
-        follow = 30,
-        //% block="Avoiding mode"
-        Avoidance = 31,
-        //% block="Stop"
-        Stop = 33,
-        //% block="Turn on rgb light"
-        TurnOn_RGB = 36,
-        //% block="Turn off rgb light"
-        TurnOff_RGB = 37,
-        //% block="Increase the angle of the servo"
-        PlusJD = 45,
-        //% block="Reduce the angle of the servo"
-        MinusJD = 46,
-        //% block="Distance"
-        Distance = 54,
-        //% block="Move left"
-        Left_Move = 69,
-        //% block="Move right"
-        Right_Move = 70,
-        //% block="Move up to left"
-        LU_Move = 71,
-        //% block="Move down to left"
-        LD_Move = 72,
-        //% block="Move up to right"
-        RU_Move = 73,
-        //% block="Move down to right"
-        RD_Move = 74,
-        //% block="Left drift"
-        drift_left = 75,
-        //% block="Right drift"
-        drift_right = 76
+    basic.forever(() => {
+        if (!init)
+          return;
+        receivedBuff = serial.readBuffer(4)
+        firstCommandCode = receivedBuff.getNumber(NumberFormat.UInt8LE, 1)
+        secondCommandCode = receivedBuff.getNumber(NumberFormat.UInt8LE, 2)
+        if (mySU03Tevent != null) {
+          mySU03Tevent();
+        }
+    })
+    //% weight=80
+    //% blockId="su03tCommandList" block="recognizes %myCommand ?"
+    export function su03tCommandList(myCommand: voiceCommand): boolean {
+        let tempA = myCommand;
+        return (firstCommandCode==0 && tempA == secondCommandCode )
     }
 
-    /**
-     * Initialize AI-Lens, return true if camera detected
-    * @returns camera online status
-    */
-    //% block="Initialize AI-Lens"
-    //% group="Basic" weight=100
-    //% color=#00B1ED
-    export function initModule(): boolean {
-        let timeout = input.runningTime()
-        while (!(pins.i2cReadNumber(CameraAdd, NumberFormat.Int8LE))) {
-            if (input.runningTime() - timeout > 30000) {
-                return false;
-            }
-        }
-        return true;
+    //% weight=70
+    //% blockId="su03tSpeakSomething" block="SU-03T read aloud %myCommand|integer %myNum"
+    export function su03tSpeakSomething(myCommand: numberCommand, myNum: number) {
+        sendBuff.setNumber(NumberFormat.UInt8LE,0,0xAA);
+        sendBuff.setNumber(NumberFormat.UInt8LE, 1, myCommand);
+        sendBuff.setNumber(NumberFormat.Int32LE, 2, myNum);
+        sendBuff.setNumber(NumberFormat.UInt8LE, 6, 0xFF);
+        serial.writeBuffer(sendBuff)
+    }
+    //% weight=60
+    //% blockId="su03tSpeakFloat" block="SU-03T read aloud %myCommand|number %myNum"
+    export function su03tSpeakFloat(myCommand: floatCommand, myNum: number) {
+        if (myCommand==0x06){
+          sendBuff.setNumber(NumberFormat.UInt8LE, 0, 0xAA);
+          sendBuff.setNumber(NumberFormat.UInt8LE, 1, myCommand);
+          sendBuff.setNumber(NumberFormat.Int32LE, 2, myNum);
+          sendBuff.setNumber(NumberFormat.UInt8LE, 6, 0xFF);
+          serial.writeBuffer(sendBuff)
+        } else if (myCommand==0x07){
+            let tempBuff=pins.createBuffer(11)
+            tempBuff.setNumber(NumberFormat.UInt8LE, 0, 0xAA);
+            tempBuff.setNumber(NumberFormat.UInt8LE, 1, myCommand);
+            tempBuff.setNumber(NumberFormat.Float64LE,2,myNum)
+            tempBuff.setNumber(NumberFormat.UInt8LE, 10, 0xFF);
+            serial.writeBuffer(tempBuff)
+        } 
+    }
+    //% weight=50
+    //% blockId="su03tSystemCommand" block="SU-03T excute system command %myCommand"
+    export function su03tSystemCommand(myCommand: systemCommand) {
+        sendBuff.setNumber(NumberFormat.UInt8LE, 0, 0xAA);
+        sendBuff.setNumber(NumberFormat.UInt8LE, 1, myCommand);
+        sendBuff.setNumber(NumberFormat.Int32LE, 2, 0);
+        sendBuff.setNumber(NumberFormat.UInt8LE, 6, 0xFF);
+        serial.writeBuffer(sendBuff)
     }
 
-    /**
-    * Switch recognition objects.
-    * @param fun Function list 
-    */
-    //% block="Switch function as %fun"
-    //% fun.fieldEditor="gridpicker"
-    //% fun.fieldOptions.columns=3
-    //% group="Basic" weight=95
-    //% color=#00B1ED
-    export function switchfunc(fun: FuncList): void {
-        const funcBuff = pins.createBuffer(9)
-        funcBuff[0] = 0x20
-        funcBuff[1] = fun
-        pins.i2cWriteBuffer(CameraAdd, funcBuff)
+    //% weight=40
+    //% blockId="su03tPreCommand" block="SU-03T read aloud %myCommand"
+    export function su03tPreCommand(myCommand: preCommand) {
+        let myTempBuff=pins.createBuffer(3)
+        myTempBuff.setNumber(NumberFormat.UInt8LE, 0, 0xAA);
+        myTempBuff.setNumber(NumberFormat.UInt8LE, 1, myCommand);
+        myTempBuff.setNumber(NumberFormat.UInt8LE, 2, 0xFF);
+        serial.writeBuffer(myTempBuff)
     }
 
-    /**
-    * Fetch one frame detection data from AI-Lens
-    */
-    //% block="Get one image from AI-Lens"
-    //% group="Basic" weight=90
-    //% color=#00B1ED
-    export function cameraImage(): void {
-        DataBuff = pins.i2cReadBuffer(CameraAdd, 9)
-        basic.pause(30)
-    }
-
-    //================ Ball Recognition =================
-    //% block="Image contains ball(s)"
-    //% group="Ball" weight=85
-    //% color=#00B1ED
-    export function checkBall(): boolean {
-        return DataBuff[0] == 7
-    }
-    //% block="Image contains %ballcolor ball"
-    //% group="Ball" weight=84
-    //% ballcolor.fieldEditor="gridpicker"
-    //% ballcolor.fieldOptions.columns=2
-    //% color=#00B1ED
-    export function ballColor(ballcolor: ballColorList): boolean {
-        if (DataBuff[0] == 7) {
-            return ballcolor == DataBuff[1]
-        }
-        return false
-    }
-    //% block="In the image get ball(s)' total"
-    //% group="Ball" weight=83
-    //% color=#00B1ED
-    export function BallTotalNum(): number {
-        if (DataBuff[0] == 7) {
-            return DataBuff[7]
-        }
-        return 0
-    }
-    //% block="In the image get ball(s)' info: %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Ball" weight=80
-    //% color=#00B1ED
-    export function ballData(status: Ballstatus): number {
-        if (DataBuff[0] == 7) {
-            switch (status) {
-                case Ballstatus.X: return DataBuff[2]
-                case Ballstatus.Y: return DataBuff[3]
-                case Ballstatus.Size: return DataBuff[4]
-                case Ballstatus.Confidence: return 100 - DataBuff[6]
-                case Ballstatus.ID: return DataBuff[8]
-                default: return 0;
-            }
-        }
-        return 0
-    }
-
-    //================ Face Recognition =================
-    //% block="Image contains a face"
-    //% group="Face" weight=75
-    //% color=#00B1ED
-    export function checkFace(): boolean {
-        return DataBuff[0] == 6
-    }
-    //% block="In the image get face(s)' total"
-    //% group="Face" weight=74
-    //% color=#00B1ED
-    export function faceTotalNum(): number {
-        if (DataBuff[0] == 6) {
-            return DataBuff[7]
-        }
-        return 0
-    }
-    //% block="In the image get face(s)' info: %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Face" weight=70
-    //% color=#00B1ED
-    export function faceData(status: Facestatus): number {
-        if (DataBuff[0] == 6) {
-            switch (status) {
-                case Facestatus.X: return DataBuff[2]
-                case Facestatus.Y: return DataBuff[3]
-                case Facestatus.W: return DataBuff[4]
-                case Facestatus.H: return DataBuff[5]
-                case Facestatus.Confidence: return 100 - DataBuff[6]
-                case Facestatus.ID: return DataBuff[8]
-                default: return 0
-            }
-        }
-        return 0
-    }
-
-    //================ Card Recognition (FIXED) =================
-    //% block="Image contains number card(s): %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Card" weight=65
-    //% color=#00B1ED
-    export function numberCard(status: numberCards): boolean {
-        if (DataBuff[0] == FuncList.Card) {
-            return status == DataBuff[1]
-        }
-        return false
-    }
-    //% block="Image contains letter card(s): %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Card" weight=60
-    //% color=#00B1ED
-    export function letterCard(status: letterCards): boolean {
-        if (DataBuff[0] == FuncList.Card) {
-            return status == DataBuff[1]
-        }
-        return false
-    }
-    //% block="Image contains traffic card(s): %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Card" weight=55
-    //% color=#00B1ED
-    export function trafficCard(status: trafficCards): boolean {
-        if (DataBuff[0] == FuncList.Card) {
-            return status == DataBuff[1]
-        }
-        return false
-    }
-    //% block="Image contains other card(s): %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Card"
-    //% color=#00B1ED
-    export function otherCard(status: otherCards): boolean {
-        if (DataBuff[0] == FuncList.Card) {
-            return status == DataBuff[1]
-        }
-        return false
-    }
-    //% block="In the image get Card(s)' total"
-    //% group="Card" weight=49
-    //% color=#00B1ED
-    export function cardTotalNum(): number {
-        if (DataBuff[0] == FuncList.Card) {
-            return DataBuff[7]
-        }
-        return 0
-    }
-    //% block="In the image get Card(s)' info: %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Card" weight=45
-    //% color=#00B1ED
-    export function CardData(status: Cardstatus): number {
-        if (DataBuff[0] == FuncList.Card) {
-            switch (status) {
-                case Cardstatus.X: return DataBuff[2]
-                case Cardstatus.Y: return DataBuff[3]
-                case Cardstatus.Size: return DataBuff[4]
-                case Cardstatus.Confidence: return 100 - DataBuff[6]
-                case Cardstatus.ID: return DataBuff[8]
-                default: return 0
-            }
-        }
-        return 0
-    }
-
-    //================ Color Recognition =================
-    //% block="Image contains color card(s): %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Color" weight=30
-    //% color=#00B1ED
-    export function colorCheck(status: ColorLs): boolean {
-        if (DataBuff[0] == 9) {
-            return status == DataBuff[1]
-        }
-        return false
-    }
-    //% block="In the image get color card(s)' total"
-    //% group="Color" weight=29
-    //% color=#00B1ED
-    export function colorTotalNum(): number {
-        if (DataBuff[0] == 9) {
-            return DataBuff[7]
-        }
-        return 0
-    }
-    //% block="In the image get color card(s)' info: %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Color" weight=25
-    //% color=#00B1ED
-    export function colorData(status: Colorstatus): number {
-        if (DataBuff[0] == 9) {
-            switch (status) {
-                case Colorstatus.X: return DataBuff[2]
-                case Colorstatus.Y: return DataBuff[3]
-                case Colorstatus.Size: return DataBuff[4]
-                case Colorstatus.Confidence: return 100 - DataBuff[6]
-                case Colorstatus.ID: return DataBuff[8]
-                default: return 0
-            }
-        }
-        return 0
-    }
-
-    //================ Line Tracking =================
-    //% block="In the image get line(s)' info: %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Tracking" weight=35
-    //% color=#00B1ED
-    export function lineData(status: Linestatus): number {
-        if (DataBuff[0] == 8) {
-            switch (status) {
-                case Linestatus.angle: return DataBuff[1]
-                case Linestatus.width: return DataBuff[2]
-                case Linestatus.len: return DataBuff[3]
-                default: return 0
-            }
-        }
-        return 0
-    }
-    //% block="Image contains line's direction towards %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=2
-    //% group="Tracking" weight=34
-    //% color=#00B1ED
-    export function lineDirection(status: LineTrend): boolean {
-        if (DataBuff[0] == 8) {
-            const angle = DataBuff[2];
-            switch (status) {
-                case LineTrend.left: return angle < 90;
-                case LineTrend.right: return angle > 130;
-                case LineTrend.front: return angle >= 90 && angle <= 130;
-                case LineTrend.none: return false;
-            }
-        } else {
-            return status == LineTrend.none;
-        }
-    }
-
-    //================ Learn Object =================
-    //% block="Learn an object with: %thingsID"
-    //% thingsID.fieldEditor="gridpicker"
-    //% thingsID.fieldOptions.columns=3
-    //% group="Learn" weight=20
-    //% color=#00B1ED
-    export function learnObject(thingsID: learnID): void {
-        const thingsBuf = pins.createBuffer(9)
-        thingsBuf[0] = 10
-        thingsBuf[1] = thingsID
-        pins.i2cWriteBuffer(CameraAdd, thingsBuf)
-    }
-    //% block="Clear learned objects"
-    //% group="Learn" weight=15
-    //% color=#00B1ED
-    export function ClearlearnObject(): void {
-        const thingsBuf = pins.createBuffer(9)
-        thingsBuf[0] = 10
-        thingsBuf[1] = 10
-        pins.i2cWriteBuffer(CameraAdd, thingsBuf)
-    }
-    //% block="Image contains learned objects: %status"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Learn" weight=14
-    //% color=#00B1ED
-    export function objectCheck(status: learnID): boolean {
-        if (DataBuff[0] == 10 && status == DataBuff[1]) {
-            if (objectConfidence(status) >= 83) {
-                return true
-            }
-        }
-        return false
-    }
-    //% block="In the image get learn object %thingsID Confidence"
-    //% group="Learn" weight=10
-    //% color=#00B1ED
-    export function objectConfidence(thingsID: learnID): number {
-        if (DataBuff[0] == 10 && DataBuff[1] == thingsID) {
-            return Math.max(0, 100 - DataBuff[2])
-        }
-        return 0
-    }
-
-    //================ ASR UART Voice Module =================
-    function strToVoc(cmdStr: string): vocabularyList {
-        // 这里你需要根据ASR模块输出字符串自行映射命令
-        // 示例模板，按需修改
-        return 0;
-    }
-
-    //% block="init ASR UART RX %rx TX %tx"
-    //% group="ASR"
-    //% color=#00B1ED
-    export function initASRUart(rx: DigitalPin, tx: DigitalPin) {
-        serial = serial.createSerial(rx, tx, BaudRate.BaudRate9600);
-    }
-
-    //% block="When ASR sensor hear %vocabulary"
-    //% group="ASR"
-    //% vocabulary.fieldEditor="gridpicker" vocabulary.fieldOptions.columns=3
-    //% color=#00B1ED
-    export function onASR(vocabulary: vocabularyList, handler: () => void) {
-        control.onEvent(asrEventId, vocabulary, handler);
-        if (!vocInitFlag) {
-            vocInitFlag = 1;
-            control.inBackground(() => {
-                while (true) {
-                    if (serial && serial.canReadLine()) {
-                        const str = serial.readLine().trim();
-                        const voc = strToVoc(str);
-                        if (voc != 0 && voc != lastvoc) {
-                            lastvoc = voc
-                            control.raiseEvent(asrEventId, lastvoc);
-                        }
-                    }
-                    basic.pause(50);
-                }
-            })
-        }
-    }
-
-    //% block="ASR sensor enter learning-model"
-    //% group="ASR"
-    //% color=#00B1ED
-    export function setASRLearn(): void {
-        if (serial) serial.writeLine("LEARN");
-    }
-
-    //% block="ASR sensor clear learned entrys"
-    //% group="ASR"
-    //% color=#00B1ED
-    export function delASRLearn(): void {
-        if (serial) serial.writeLine("CLEAR");
-    }
 }
