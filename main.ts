@@ -2,13 +2,18 @@
  * This extension is designed to programme and drive the Smart AI Lens(科易)
  */
 //% color=#0031AF icon="\uf06e" 
-//% groups='["Basic", "Ball", "Face", "Card", "Color", "Tracking", "Learn"]'
+//% groups='["Basic", "Ball", "Face", "Card", "Color", "Tracking", "Learn","ASR"]'
 //% block="Keyi_AI-Lens"
 namespace Keyi_AILens {
     const CameraAdd = 0X14;
     let DataBuff = pins.createBuffer(9);
+    const asrEventId = 8901;
+    let vocInitFlag = 0;
+    let lastvoc = 0;
+    let serial: Serial | null = null;
+
     /**
-    * Status List of Ball
+    * Recognition Function List
     */
     export enum FuncList {
         //% block="Card recognition"
@@ -25,7 +30,7 @@ namespace Keyi_AILens {
         Things = 10
     }
     /**
-    * Status List of Ball
+    * Ball data field
     */
     export enum Ballstatus {
         //% block="X"
@@ -40,7 +45,7 @@ namespace Keyi_AILens {
         ID = 8
     }
     /**
-    * Status List of Face
+    * Face data field
     */
     export enum Facestatus {
         //% block="X"
@@ -57,7 +62,7 @@ namespace Keyi_AILens {
         ID = 8
     }
     /**
-    * Status List of Card
+    * Card data field
     */
     export enum Cardstatus {
         //% block="X"
@@ -72,7 +77,7 @@ namespace Keyi_AILens {
         ID = 8
     }
     /**
-    * Status List of Color
+    * Color target data field
     */
     export enum Colorstatus {
         //% block="X"
@@ -86,9 +91,7 @@ namespace Keyi_AILens {
         //% block="Color ID"
         ID = 8
     }
-    /**
-    * Status List of Color
-    */
+
     export enum ColorLs {
         //% block="Black"
         black = 4,
@@ -213,10 +216,15 @@ namespace Keyi_AILens {
         cup = 15
     }
     export enum learnID {
+        //% block="ID1"
         ID1 = 1,
+        //% block="ID2"
         ID2 = 2,
+        //% block="ID3"
         ID3 = 3,
+        //% block="ID4"
         ID4 = 4,
+        //% block="ID5"
         ID5 = 5
     }
     export enum ballColorList {
@@ -225,7 +233,7 @@ namespace Keyi_AILens {
         //% block="Blue"
         Blue = 1
     }
-    /////////ASR
+    /////////ASR Voice Command
     export enum vocabularyList {
         //% block="Lights on"
         TurnOn_Light = 1,
@@ -286,54 +294,54 @@ namespace Keyi_AILens {
         //% block="Right drift"
         drift_right = 76
     }
+
     /**
-    * TODO: Waiting for module initialize.
+     * Initialize AI-Lens, return true if camera detected
+    * @returns camera online status
     */
     //% block="Initialize AI-Lens"
-    //% group="Basic" weight=100 subcategory=Vision
+    //% group="Basic" weight=100
     //% color=#00B1ED
-    export function initModule(): void {
+    export function initModule(): boolean {
         let timeout = input.runningTime()
         while (!(pins.i2cReadNumber(CameraAdd, NumberFormat.Int8LE))) {
             if (input.runningTime() - timeout > 30000) {
-                while (true) {
-                    basic.showString("Init AILens Error!")
-                }
+                return false;
             }
         }
+        return true;
     }
+
     /**
-    * TODO: Switch recognition objects.
+    * Switch recognition objects.
     * @param fun Function list 
     */
     //% block="Switch function as %fun"
     //% fun.fieldEditor="gridpicker"
     //% fun.fieldOptions.columns=3
-    //% group="Basic" weight=95 subcategory=Vision
+    //% group="Basic" weight=95
     //% color=#00B1ED
     export function switchfunc(fun: FuncList): void {
-        let funcBuff = pins.i2cReadBuffer(CameraAdd, 9)
+        const funcBuff = pins.createBuffer(9)
         funcBuff[0] = 0x20
         funcBuff[1] = fun
         pins.i2cWriteBuffer(CameraAdd, funcBuff)
     }
 
     /**
-    * TODO: Get the image in a frame
+    * Fetch one frame detection data from AI-Lens
     */
     //% block="Get one image from AI-Lens"
-    //% group="Basic" weight=90 subcategory=Vision
+    //% group="Basic" weight=90
     //% color=#00B1ED
     export function cameraImage(): void {
         DataBuff = pins.i2cReadBuffer(CameraAdd, 9)
         basic.pause(30)
     }
 
-    /**
-    * TODO: Judge the image contains a ball
-    */
+    //================ Ball Recognition =================
     //% block="Image contains ball(s)"
-    //% group="Ball" weight=85 subcategory=Vision
+    //% group="Ball" weight=85
     //% color=#00B1ED
     export function checkBall(): boolean {
         return DataBuff[0] == 7
@@ -341,460 +349,287 @@ namespace Keyi_AILens {
     //% block="Image contains %ballcolor ball"
     //% group="Ball" weight=84
     //% ballcolor.fieldEditor="gridpicker"
-    //% ballcolor.fieldOptions.columns=2 subcategory=Vision
+    //% ballcolor.fieldOptions.columns=2
     //% color=#00B1ED
     export function ballColor(ballcolor: ballColorList): boolean {
         if (DataBuff[0] == 7) {
             return ballcolor == DataBuff[1]
         }
-        else {
-            return false
-        }
+        return false
     }
     //% block="In the image get ball(s)' total"
-    //% group="Ball" weight=83 subcategory=Vision
+    //% group="Ball" weight=83
     //% color=#00B1ED
     export function BallTotalNum(): number {
         if (DataBuff[0] == 7) {
             return DataBuff[7]
         }
-        else {
-            return 0
-        }
+        return 0
     }
-    /**
-    * TODO: In the image get ball(s)' info
-    */
     //% block="In the image get ball(s)' info: %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Ball" weight=80 subcategory=Vision
+    //% group="Ball" weight=80
     //% color=#00B1ED
     export function ballData(status: Ballstatus): number {
         if (DataBuff[0] == 7) {
             switch (status) {
-                case Ballstatus.X:
-                    return DataBuff[2]
-                    break
-                case Ballstatus.Y:
-                    return DataBuff[3]
-                    break
-                case Ballstatus.Size:
-                    return DataBuff[4]
-                    break
-                case Ballstatus.Confidence:
-                    return 100 - DataBuff[6]
-                    break
-                case Ballstatus.ID:
-                    return DataBuff[8]
-                    break
-                default:
-                    return 0;
+                case Ballstatus.X: return DataBuff[2]
+                case Ballstatus.Y: return DataBuff[3]
+                case Ballstatus.Size: return DataBuff[4]
+                case Ballstatus.Confidence: return 100 - DataBuff[6]
+                case Ballstatus.ID: return DataBuff[8]
+                default: return 0;
             }
         }
-        else {
-            return 0
-        }
+        return 0
     }
 
-
-    /**
-    * TODO: Judge whether there is a face in the picture
-    */
+    //================ Face Recognition =================
     //% block="Image contains a face"
-    //% group="Face" weight=75 subcategory=Vision
+    //% group="Face" weight=75
     //% color=#00B1ED
     export function checkFace(): boolean {
         return DataBuff[0] == 6
     }
     //% block="In the image get face(s)' total"
-    //% group="Face" weight=74 subcategory=Vision
+    //% group="Face" weight=74
     //% color=#00B1ED
     export function faceTotalNum(): number {
         if (DataBuff[0] == 6) {
             return DataBuff[7]
         }
-        else {
-            return 0
-        }
+        return 0
     }
-    /**
-    * TODO: Judge whether there is a face in the picture
-    * @param status Facestatus
-    */
     //% block="In the image get face(s)' info: %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Face" weight=70 subcategory=Vision
+    //% group="Face" weight=70
     //% color=#00B1ED
     export function faceData(status: Facestatus): number {
         if (DataBuff[0] == 6) {
             switch (status) {
-                case Facestatus.X:
-                    return DataBuff[2]
-                    break
-                case Facestatus.Y:
-                    return DataBuff[3]
-                    break
-                case Facestatus.W:
-                    return DataBuff[4]
-                    break
-                case Facestatus.H:
-                    return DataBuff[5]
-                    break
-                case Facestatus.Confidence:
-                    return 100 - DataBuff[6]
-                    break
-                case Facestatus.ID:
-                    return DataBuff[8]
-                    break
-                default:
-                    return 0
+                case Facestatus.X: return DataBuff[2]
+                case Facestatus.Y: return DataBuff[3]
+                case Facestatus.W: return DataBuff[4]
+                case Facestatus.H: return DataBuff[5]
+                case Facestatus.Confidence: return 100 - DataBuff[6]
+                case Facestatus.ID: return DataBuff[8]
+                default: return 0
             }
         }
-        else {
-            return 0
-        }
+        return 0
     }
-    /**
-    * TODO: Judge whether there is a digital card in the screen
-    * @param status numberCards
-    */
+
+    //================ Card Recognition (FIXED) =================
     //% block="Image contains number card(s): %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Card" weight=65 subcategory=Vision
+    //% group="Card" weight=65
     //% color=#00B1ED
     export function numberCard(status: numberCards): boolean {
-        if (DataBuff[0] == 2) {
+        if (DataBuff[0] == FuncList.Card) {
             return status == DataBuff[1]
         }
-        else
-            return false
+        return false
     }
-    /**
-    * TODO: Judge whether there is a letter card in the screen
-    * @param status letterCards
-    */
     //% block="Image contains letter card(s): %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Card" weight=60 subcategory=Vision
+    //% group="Card" weight=60
     //% color=#00B1ED
     export function letterCard(status: letterCards): boolean {
-        if (DataBuff[0] == 4) {
+        if (DataBuff[0] == FuncList.Card) {
             return status == DataBuff[1]
         }
-        else
-            return false
+        return false
     }
-    /**
-    * TODO: Judge whether there is a traffic card in the screen
-    * @param status trafficCards
-    */
     //% block="Image contains traffic card(s): %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Card" weight=55 subcategory=Vision
+    //% group="Card" weight=55
     //% color=#00B1ED
     export function trafficCard(status: trafficCards): boolean {
-        if (DataBuff[0] == 3) {
+        if (DataBuff[0] == FuncList.Card) {
             return status == DataBuff[1]
         }
-        else
-            return false
+        return false
     }
-    /**
-    * TODO: Judge whether there is a other card in the screen
-    * @param status otherCards
-    */
     //% block="Image contains other card(s): %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Card" subcategory=Vision
+    //% group="Card"
     //% color=#00B1ED
     export function otherCard(status: otherCards): boolean {
-        if (DataBuff[0] == 3) {
+        if (DataBuff[0] == FuncList.Card) {
             return status == DataBuff[1]
         }
-        else
-            return false
+        return false
     }
     //% block="In the image get Card(s)' total"
-    //% group="Card" weight=49 subcategory=Vision
+    //% group="Card" weight=49
     //% color=#00B1ED
     export function cardTotalNum(): number {
-        if (DataBuff[0] == 2 || DataBuff[0] == 3 || DataBuff[0] == 4) {
+        if (DataBuff[0] == FuncList.Card) {
             return DataBuff[7]
         }
-        else {
-            return 0
-        }
+        return 0
     }
-    /**
-    * TODO: Card parameters in the screen
-    * @param status otherCards
-    */
     //% block="In the image get Card(s)' info: %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Card" weight=45 subcategory=Vision
+    //% group="Card" weight=45
     //% color=#00B1ED
     export function CardData(status: Cardstatus): number {
-        if (DataBuff[0] == 2 || DataBuff[0] == 3 || DataBuff[0] == 4) {
+        if (DataBuff[0] == FuncList.Card) {
             switch (status) {
-                case Cardstatus.X:
-                    return DataBuff[2]
-                    break
-                case Cardstatus.Y:
-                    return DataBuff[3]
-                    break
-                case Cardstatus.Size:
-                    return DataBuff[4]
-                    break
-                case Cardstatus.Confidence:
-                    return 100 - DataBuff[6]
-                    break
-                case Cardstatus.ID:
-                    return DataBuff[8]
-                    break
-                default:
-                    return 0
+                case Cardstatus.X: return DataBuff[2]
+                case Cardstatus.Y: return DataBuff[3]
+                case Cardstatus.Size: return DataBuff[4]
+                case Cardstatus.Confidence: return 100 - DataBuff[6]
+                case Cardstatus.ID: return DataBuff[8]
+                default: return 0
             }
         }
-        else
-            return 0
+        return 0
     }
-    /**
-    * TODO: Judge whether there is a color in the screen
-    * @param status ColorLs
-    */
+
+    //================ Color Recognition =================
     //% block="Image contains color card(s): %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Color" weight=30 subcategory=Vision
+    //% group="Color" weight=30
     //% color=#00B1ED
     export function colorCheck(status: ColorLs): boolean {
         if (DataBuff[0] == 9) {
             return status == DataBuff[1]
         }
-        else
-            return false
+        return false
     }
     //% block="In the image get color card(s)' total"
-    //% group="Color" weight=29 subcategory=Vision
+    //% group="Color" weight=29
     //% color=#00B1ED
     export function colorTotalNum(): number {
         if (DataBuff[0] == 9) {
             return DataBuff[7]
         }
-        else {
-            return 0
-        }
+        return 0
     }
-    /**
-    * TODO: color parameters in the screen
-    * @param status Colorstatus
-    */
     //% block="In the image get color card(s)' info: %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Color" weight=25 subcategory=Vision
+    //% group="Color" weight=25
     //% color=#00B1ED
     export function colorData(status: Colorstatus): number {
         if (DataBuff[0] == 9) {
             switch (status) {
-                case Colorstatus.X:
-                    return DataBuff[2]
-                    break
-                case Colorstatus.Y:
-                    return DataBuff[3]
-                    break
-                case Colorstatus.Size:
-                    return DataBuff[4]
-                    break
-                case Colorstatus.Confidence:
-                    return 100 - DataBuff[6]
-                    break
-                case Colorstatus.ID:
-                    return DataBuff[8]
-                    break
-                default:
-                    return 0
+                case Colorstatus.X: return DataBuff[2]
+                case Colorstatus.Y: return DataBuff[3]
+                case Colorstatus.Size: return DataBuff[4]
+                case Colorstatus.Confidence: return 100 - DataBuff[6]
+                case Colorstatus.ID: return DataBuff[8]
+                default: return 0
             }
         }
-        else {
-            return 0
-        }
+        return 0
     }
-    /**
-    * TODO: line parameters in the screen
-    * @param status Linestatus
-    */
+
+    //================ Line Tracking =================
     //% block="In the image get line(s)' info: %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Tracking"
-    //% weight=35 subcategory=Vision
+    //% group="Tracking" weight=35
     //% color=#00B1ED
     export function lineData(status: Linestatus): number {
         if (DataBuff[0] == 8) {
             switch (status) {
-                case Linestatus.angle:
-                    return DataBuff[1]
-                    break
-                case Linestatus.width:
-                    return DataBuff[2]
-                    break
-                case Linestatus.len:
-                    return DataBuff[3]
-                    break
-                default:
-                    return 0
+                case Linestatus.angle: return DataBuff[1]
+                case Linestatus.width: return DataBuff[2]
+                case Linestatus.len: return DataBuff[3]
+                default: return 0
             }
         }
-        else
-            return 0
+        return 0
     }
-    /**
-    * TODO: line parameters in the screen
-    * @param status Linestatus
-    */
     //% block="Image contains line's direction towards %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=2
-    //% group="Tracking"
-    //% weight=34 subcategory=Vision
+    //% group="Tracking" weight=34
     //% color=#00B1ED
     export function lineDirection(status: LineTrend): boolean {
         if (DataBuff[0] == 8) {
+            const angle = DataBuff[2];
             switch (status) {
-                case LineTrend.none:
-                    return false
-                    break
-                case LineTrend.left:
-                    if (DataBuff[2] < 90) {
-                        return true
-                    }
-                    else {
-                        return false
-                    }
-                    break
-                case LineTrend.right:
-                    if (DataBuff[2] > 130) {
-                        return true
-                    }
-                    else {
-                        return false
-                    }
-                    break
-                case LineTrend.front:
-                    if (DataBuff[2] > 90 && DataBuff[2] < 130) {
-                        return true
-                    }
-                    else {
-                        return false
-                    }
-                    break
+                case LineTrend.left: return angle < 90;
+                case LineTrend.right: return angle > 130;
+                case LineTrend.front: return angle >= 90 && angle <= 130;
+                case LineTrend.none: return false;
             }
+        } else {
+            return status == LineTrend.none;
         }
-        else {
-            if (status == LineTrend.none)
-                return true
-        }
-        return false
     }
 
-    /**
-    * TODO: Learn an object in a picture
-    * @param thingsID Edit a label for the object
-    */
+    //================ Learn Object =================
     //% block="Learn an object with: %thingsID"
-    //% status.fieldEditor="gridpicker"
-    //% status.fieldOptions.columns=3
-    //% group="Learn" weight=20 subcategory=Vision
+    //% thingsID.fieldEditor="gridpicker"
+    //% thingsID.fieldOptions.columns=3
+    //% group="Learn" weight=20
     //% color=#00B1ED
     export function learnObject(thingsID: learnID): void {
-        let thingsBuf = pins.createBuffer(9)
+        const thingsBuf = pins.createBuffer(9)
         thingsBuf[0] = 10
         thingsBuf[1] = thingsID
         pins.i2cWriteBuffer(CameraAdd, thingsBuf)
     }
-    /**
-    * TODO: Clear Learned Objects
-    */
     //% block="Clear learned objects"
-    //% group="Learn" weight=15 subcategory=Vision
+    //% group="Learn" weight=15
     //% color=#00B1ED
     export function ClearlearnObject(): void {
-        let thingsBuf = pins.createBuffer(9)
+        const thingsBuf = pins.createBuffer(9)
         thingsBuf[0] = 10
         thingsBuf[1] = 10
         pins.i2cWriteBuffer(CameraAdd, thingsBuf)
     }
-    /**
-    * TODO: Judge whether there are any learned objects in the picture
-    */
     //% block="Image contains learned objects: %status"
     //% status.fieldEditor="gridpicker"
     //% status.fieldOptions.columns=3
-    //% group="Learn" weight=14 subcategory=Vision
+    //% group="Learn" weight=14
     //% color=#00B1ED
     export function objectCheck(status: learnID): boolean {
         if (DataBuff[0] == 10 && status == DataBuff[1]) {
             if (objectConfidence(status) >= 83) {
                 return true
             }
-            else {
-                return false
-            }
         }
-        else
-            return false
+        return false
     }
-    /**
-    * TODO: Judge whether there are any learned objects in the picture
-    */
     //% block="In the image get learn object %thingsID Confidence"
-    //% group="Learn" weight=10 subcategory=Vision
+    //% group="Learn" weight=10
     //% color=#00B1ED
     export function objectConfidence(thingsID: learnID): number {
-        if (DataBuff[0] == 10 && DataBuff[2] < 30) {
-            if (DataBuff[1] == thingsID) {
-                return 100 - DataBuff[2]
-            }
-            else {
-                return 0
-            }
+        if (DataBuff[0] == 10 && DataBuff[1] == thingsID) {
+            return Math.max(0, 100 - DataBuff[2])
         }
         return 0
     }
-    const asrEventId = 8901;
-    let vocInitFlag = 0;
-    let lastvoc = 0;
-    let serial: Serial | null = null;
-    
-    enum vocabularyList {
-        cmd1 = 1,
-        cmd2 = 2,
-        cmd3 = 3,
-    }
-    function strToVoc(cmdStr: string): number {
-        if (cmdStr.includes("CMD1")) return vocabularyList.cmd1;
-        if (cmdStr.includes("CMD2")) return vocabularyList.cmd2;
-        if (cmdStr.includes("CMD3")) return vocabularyList.cmd3;
+
+    //================ ASR UART Voice Module =================
+    function strToVoc(cmdStr: string): vocabularyList {
+        // 这里你需要根据ASR模块输出字符串自行映射命令
+        // 示例模板，按需修改
         return 0;
     }
-    
+
     //% block="init ASR UART RX %rx TX %tx"
-    //% subcategory=ASR group="UART Port"
+    //% group="ASR"
     //% color=#00B1ED
     export function initASRUart(rx: DigitalPin, tx: DigitalPin) {
         serial = serial.createSerial(rx, tx, BaudRate.BaudRate9600);
     }
-    
-    //% block="ASR sensor hear %vocabulary"
-    //% subcategory=ASR group="UART Port"
+
+    //% block="When ASR sensor hear %vocabulary"
+    //% group="ASR"
     //% vocabulary.fieldEditor="gridpicker" vocabulary.fieldOptions.columns=3
     //% color=#00B1ED
     export function onASR(vocabulary: vocabularyList, handler: () => void) {
@@ -803,7 +638,7 @@ namespace Keyi_AILens {
             vocInitFlag = 1;
             control.inBackground(() => {
                 while (true) {
-                    if(serial && serial.canReadLine()){
+                    if (serial && serial.canReadLine()) {
                         const str = serial.readLine().trim();
                         const voc = strToVoc(str);
                         if (voc != 0 && voc != lastvoc) {
@@ -816,18 +651,18 @@ namespace Keyi_AILens {
             })
         }
     }
-    
+
     //% block="ASR sensor enter learning-model"
-    //% subcategory=ASR group="UART Port"
+    //% group="ASR"
     //% color=#00B1ED
     export function setASRLearn(): void {
-        if(serial) serial.writeLine("LEARN");
+        if (serial) serial.writeLine("LEARN");
     }
-    
+
     //% block="ASR sensor clear learned entrys"
-    //% subcategory=ASR group="UART Port"
+    //% group="ASR"
     //% color=#00B1ED
     export function delASRLearn(): void {
-        if(serial) serial.writeLine("CLEAR");
+        if (serial) serial.writeLine("CLEAR");
     }
 }
