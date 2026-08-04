@@ -830,3 +830,4 @@ namespace Keyi_AILens {
     export function delASRLearn(): void {
         if(serial) serial.writeLine("CLEAR");
     }
+}
